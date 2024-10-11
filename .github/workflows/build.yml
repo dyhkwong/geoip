@@ -2,7 +2,7 @@ name: Build geoip.dat
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 0 * * 4"
+    - cron: "0 0 2 * *"
   push:
     branches:
       - master
@@ -26,18 +26,14 @@ jobs:
 
       - name: Set variables
         run: |
-          echo "TAG_NAME=$(date +%Y%m%d%H%M)" >> $GITHUB_ENV
-          echo "RELEASE_NAME=$(date +%Y%m%d%H%M)" >> $GITHUB_ENV
+          echo "TAG_NAME=$(date +%Y%m010000)" >> $GITHUB_ENV
+          echo "RELEASE_NAME=$(date +%Y%m010000)" >> $GITHUB_ENV
         shell: bash
 
-      - name: Get GeoLite2
-        env:
-          LICENSE_KEY: ${{ secrets.MAXMIND_LICEHSE }}
+      - name: Get DB-IP Country Lite MMDB
         run: |
-          curl -L "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-Country-CSV&license_key=${LICENSE_KEY}&suffix=zip" -o GeoLite2-Country-CSV.zip
-          unzip GeoLite2-Country-CSV.zip
-          rm -f GeoLite2-Country-CSV.zip
-          mv GeoLite2* geolite2
+          curl -L "https://download.db-ip.com/free/dbip-country-lite-$(date +%Y)-$(date +%m).mmdb.gz" -o dbip-country-lite.mmdb.gz
+          gzip -d -k dbip-country-lite.mmdb.gz
 
       - name: Build geoip.dat
         run: |
@@ -50,6 +46,22 @@ jobs:
             sha256sum ${name} > ./${name}.sha256sum
           done
 
+      - name: Release and upload assets
+        run: |
+          mv ./dbip-country-lite.mmdb.gz "dbip-country-lite-$(date +%Y)-$(date +%m).mmdb.gz"
+          gh release create ${{ env.TAG_NAME }} -t ${{ env.RELEASE_NAME }} \
+            ./output/geoip.dat \
+            ./output/geoip.dat.sha256sum \
+            ./output/geoip-only-cn-private.dat \
+            ./output/geoip-only-cn-private.dat.sha256sum \
+            ./output/cn.dat \
+            ./output/cn.dat.sha256sum \
+            ./output/private.dat \
+            ./output/private.dat.sha256sum \
+            ./*.mmdb.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Git push assets to "release" branch
         run: |
           cd output || exit 1
@@ -61,17 +73,3 @@ jobs:
           git commit -m "${{ env.RELEASE_NAME }}"
           git remote add geoip "https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}"
           git push -f geoip release
-
-      - name: Release and upload assets
-        run: |
-          gh release create ${{ env.TAG_NAME }} -t ${{ env.RELEASE_NAME }} \
-            ./output/geoip.dat \
-            ./output/geoip.dat.sha256sum \
-            ./output/geoip-only-cn-private.dat \
-            ./output/geoip-only-cn-private.dat.sha256sum \
-            ./output/cn.dat \
-            ./output/cn.dat.sha256sum \
-            ./output/private.dat \
-            ./output/private.dat.sha256sum
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
